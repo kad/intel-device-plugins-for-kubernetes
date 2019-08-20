@@ -107,16 +107,17 @@ func readFileByPattern(pattern string) (string, []byte, error) {
 }
 
 func parseDev(devData string) (uint32, uint32, error) {
+	devData = strings.TrimSpace(devData)
 	numbers := strings.SplitN(devData, ":", 2)
 	minor := numbers[0]
 	major := numbers[1]
 	minorInt, err := strconv.ParseInt(minor, 10, 32)
 	if err != nil {
-		return 0, 0, fmt.Errorf("can't convert device minor %s to a number", minor)
+		return 0, 0, errors.Wrapf(err,"can't convert device minor %s to a number", minor)
 	}
 	majorInt, err := strconv.ParseInt(major, 10, 32)
 	if err != nil {
-		return 0, 0, fmt.Errorf("can't convert device major %s to a number", major)
+		return 0, 0, errors.Wrapf(err, "can't convert device major %s to a number", major)
 	}
 
 	return uint32(minorInt), uint32(majorInt), nil
