@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package aocx
+package bitstream
 
 import (
 	"bytes"
@@ -21,16 +21,20 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strconv"
 
-	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/gbs"
 	"github.com/pkg/errors"
 )
 
-// OpenCLUUID is a special AFU UUID that is used for all OpenCL BSP based FPGA bitstreams
-const OpenCLUUID = "18b79ffa2ee54aa096ef4230dafacb5f"
+const (
+	// OpenCLUUID is a special AFU UUID that is used for all OpenCL BSP based FPGA bitstreams
+	OpenCLUUID        = "18b79ffa2ee54aa096ef4230dafacb5f"
+	fileExtensionAOCX = ".aocx"
+)
 
-// A File represents an open GBS file.
-type File struct {
+// A FileAOCX represents an open AOCX file.
+type FileAOCX struct {
 	AutoDiscovery          string
 	AutoDiscoveryXML       string
 	Board                  string
@@ -43,17 +47,19 @@ type File struct {
 	QuartusReport          string
 	Target                 string
 	Version                string
-	GBS                    *gbs.File
+	GBS                    *FileGBS
 	closer                 io.Closer
+	// embed common bitstream interfaces
+	File
 }
 
-// Open opens the named file using os.Open and prepares it for use as GBS.
-func Open(name string) (*File, error) {
+// OpenAOCX opens the named file using os.Open and prepares it for use as GBS.
+func OpenAOCX(name string) (*FileAOCX, error) {
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	ff, err := NewFile(f)
+	ff, err := NewFileAOCX(f)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -62,10 +68,10 @@ func Open(name string) (*File, error) {
 	return ff, nil
 }
 
-// Close closes the File.
-// If the File was created using NewFile directly instead of Open,
+// Close closes the FileAOCX.
+// If the FileAOCX was created using NewFileAOCX directly instead of Open,
 // Close has no effect.
-func (f *File) Close() (err error) {
+func (f *FileAOCX) Close() (err error) {
 	if f.closer != nil {
 		err = f.closer.Close()
 		f.closer = nil
@@ -73,7 +79,7 @@ func (f *File) Close() (err error) {
 	return
 }
 
-func setSection(f *File, section *elf.Section) error {
+func setSection(f *FileAOCX, section *elf.Section) error {
 	name := section.SectionHeader.Name
 	if name == ".acl.fpga.bin" {
 		data, err := section.Data()
@@ -112,14 +118,14 @@ func setSection(f *File, section *elf.Section) error {
 	return nil
 }
 
-// NewFile creates a new File for accessing an ELF binary in an underlying reader.
+// NewFileAOCX creates a new File for accessing an ELF binary in an underlying reader.
 // The ELF binary is expected to start at position 0 in the ReaderAt.
-func NewFile(r io.ReaderAt) (*File, error) {
+func NewFileAOCX(r io.ReaderAt) (*FileAOCX, error) {
 	el, err := elf.NewFile(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to read header")
 	}
-	f := new(File)
+	f := new(FileAOCX)
 	for _, section := range el.Sections {
 		err = setSection(f, section)
 		if err != nil {
@@ -129,7 +135,7 @@ func NewFile(r io.ReaderAt) (*File, error) {
 	return f, nil
 }
 
-func parseFpgaBin(d []byte) (*gbs.File, error) {
+func parseFpgaBin(d []byte) (*FileGBS, error) {
 	gb, err := elf.NewFile(bytes.NewReader(d))
 	gz := gb.Section(".acl.gbs.gz")
 	if gz == nil {
@@ -143,7 +149,7 @@ func parseFpgaBin(d []byte) (*gbs.File, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to uncompress .acl.gbs.gz")
 	}
-	g, err := gbs.NewFile(bytes.NewReader(b))
+	g, err := NewFileGBS(bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -152,4 +158,63 @@ func parseFpgaBin(d []byte) (*gbs.File, error) {
 		return nil, errors.Errorf("incorrect OpenCL BSP AFU UUID (%s)", afuUUID)
 	}
 	return g, nil
+}
+
+// RawBitstreamReader returns Reader for raw bitstream data
+func (f *FileAOCX) RawBitstreamReader() io.ReadSeeker {
+	if f.GBS != nil {
+		return f.GBS.Bitstream.Open()
+	}
+	return nil
+}
+
+// RawBitstreamData returns raw bitstream data
+func (f *FileAOCX) RawBitstreamData() ([]byte, error) {
+	if f.GBS != nil {
+		return f.GBS.Bitstream.Data()
+	}
+	return nil, errors.Errorf("GBS section not found")
+}
+
+// UniqueUUID represents the unique field that identifies bitstream.
+// For AOCX it is the unique Hash in the header.
+func (f *FileAOCX) UniqueUUID() string {
+	return f.Hash
+}
+
+// InterfaceUUID returns underlying GBS InterfaceUUID
+func (f *FileAOCX) InterfaceUUID() (ret string) {
+	if f.GBS != nil {
+		ret = f.GBS.InterfaceUUID()
+	}
+	return
+}
+
+// AcceleratorTypeUUID returns underlying GBS AFU ID
+func (f *FileAOCX) AcceleratorTypeUUID() (ret string) {
+	if f.GBS != nil {
+		ret = f.GBS.AcceleratorTypeUUID()
+	}
+	return
+}
+
+// InstallPath returns unique filename for bitstream relative to given directory
+func (f *FileAOCX) InstallPath(root string) (ret string) {
+	interfaceID := f.InterfaceUUID()
+	uniqID := f.UniqueUUID()
+	if interfaceID != "" && uniqID != "" {
+		ret = filepath.Join(root, interfaceID, uniqID+fileExtensionAOCX)
+	}
+	return
+}
+
+// ExtraMetadata returns map of key/value with additional metadata that can be detected from bitstream
+func (f *FileAOCX) ExtraMetadata() map[string]string {
+	return map[string]string{
+		"Board":   f.Board,
+		"Target":  f.Target,
+		"Hash":    f.Hash,
+		"Version": f.Version,
+		"Size":    strconv.FormatUint(f.GBS.Bitstream.Size, 10),
+	}
 }

@@ -168,6 +168,7 @@ func GetAFUDevice(sysFsPrefix, portDeviceName string) (*FPGADevice, error) {
 
 // GetFMEDevice reads FME properties from SysFs
 func GetFMEDevice(sysFsPrefix, portDeviceName string) (*FPGADevice, error) {
+	portDeviceName = strings.TrimPrefix(portDeviceName, "/dev/")
 	afuDevice, err := GetAFUDevice(sysFsPrefix, portDeviceName)
 	if err != nil {
 		return nil, err

@@ -21,16 +21,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
-
-	// "io/ioutil"
-
 	"strings"
 
 	"github.com/pkg/errors"
 
-	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/aocx"
-	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/gbs"
+	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/bitstream"
+	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/device"
 	fpga "github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/linux"
 )
 
@@ -73,6 +69,8 @@ func main() {
 		err = portInfo(device)
 	case "install":
 		err = installBitstream(bitstream, dryRun)
+	case "magic":
+		err = magic(device)
 	default:
 		err = errors.Errorf("unknown command %+v", flag.Args())
 
@@ -89,7 +87,7 @@ func validateFlags(cmd, bitstream, device string) error {
 		if bitstream == "" {
 			return errors.Errorf("bitstream filename is missing")
 		}
-	case "fpgainfo", "fmeinfo", "portinfo":
+	case "fpgainfo", "fmeinfo", "portinfo", "magic":
 		// device must not be empty
 		if device == "" {
 			return errors.Errorf("FPGA device name is missing")
@@ -106,32 +104,27 @@ func validateFlags(cmd, bitstream, device string) error {
 	return nil
 }
 
-type bitstreamInfo struct {
-	InterfaceUUID       string
-	AcceleratorTypeUUID string
-	InstallPath         string
-	Extra               map[string]string
+func magic(dev string) (err error) {
+	d, err := device.GetFMEDevice("", dev)
+	fmt.Printf("%+v %+v\n", d, err)
+	return
 }
 
 func installBitstream(fname string, dryRun bool) (err error) {
-	var info *bitstreamInfo
-	switch filepath.Ext(fname) {
-	case ".gbs":
-		info, err = gbsInfo(fname)
-	case ".aocx":
-		info, err = aocxInfo(fname)
-	default:
-		err = errors.Errorf("unknown file format of file %s", fname)
-	}
+	info, err := bitstream.Open(fname)
 	if err != nil {
 		return
 	}
-	fmt.Printf("Installing bitstream %q as %q\n", fname, info.InstallPath)
+	defer info.Close()
+
+	installPath := info.InstallPath(fpgaBitStreamDirectory)
+
+	fmt.Printf("Installing bitstream %q as %q\n", fname, installPath)
 	if dryRun {
 		fmt.Println("Dry-run: no copying performed")
 		return
 	}
-	err = os.MkdirAll(filepath.Dir(info.InstallPath), 0755)
+	err = os.MkdirAll(filepath.Dir(installPath), 0755)
 	if err != nil {
 		return errors.Wrap(err, "unable to create destination directory")
 	}
@@ -140,7 +133,7 @@ func installBitstream(fname string, dryRun bool) (err error) {
 		return errors.Wrap(err, "can't open bitstream file")
 	}
 	defer src.Close()
-	dst, err := os.OpenFile(info.InstallPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	dst, err := os.OpenFile(installPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return errors.Wrap(err, "can't create destination file")
 	}
@@ -160,70 +153,24 @@ func fpgaInfo(fname string) error {
 }
 
 func printBitstreamInfo(fname string) (err error) {
-	var info *bitstreamInfo
-	switch filepath.Ext(fname) {
-	case ".gbs":
-		info, err = gbsInfo(fname)
-	case ".aocx":
-		info, err = aocxInfo(fname)
-	default:
-		err = errors.Errorf("unknown file format of file %s", fname)
-	}
+	info, err := bitstream.Open(fname)
 	if err != nil {
 		return
 	}
+	defer info.Close()
 	fmt.Printf("Bitstream file        : %q\n", fname)
-	fmt.Printf("Interface UUID        : %q\n", info.InterfaceUUID)
-	fmt.Printf("Accelerator Type UUID : %q\n", info.AcceleratorTypeUUID)
-	fmt.Printf("Installation Path     : %q\n", info.InstallPath)
-	if len(info.Extra) > 0 {
+	fmt.Printf("Interface UUID        : %q\n", info.InterfaceUUID())
+	fmt.Printf("Accelerator Type UUID : %q\n", info.AcceleratorTypeUUID())
+	fmt.Printf("Unique UUID           : %q\n", info.UniqueUUID())
+	fmt.Printf("Installation Path     : %q\n", info.InstallPath(fpgaBitStreamDirectory))
+	extra := info.ExtraMetadata()
+	if len(extra) > 0 {
 		fmt.Println("Extra:")
-		for k, v := range info.Extra {
+		for k, v := range extra {
 			fmt.Printf("\t%s : %q\n", k, v)
 		}
 	}
 	return
-}
-
-func gbsInfo(fname string) (info *bitstreamInfo, err error) {
-	m, err := gbs.Open(fname)
-	if err != nil {
-		return
-	}
-	defer m.Close()
-
-	info = &bitstreamInfo{
-		InterfaceUUID:       m.InterfaceUUID(),
-		AcceleratorTypeUUID: m.AcceleratorTypeUUID(),
-		InstallPath:         filepath.Join(fpgaBitStreamDirectory, m.InterfaceUUID(), m.AcceleratorTypeUUID()+filepath.Ext(fname)),
-		Extra:               map[string]string{"Size": strconv.FormatUint(m.Bitstream.Size, 10)},
-	}
-	return
-}
-
-func aocxInfo(fname string) (info *bitstreamInfo, err error) {
-	m, err := aocx.Open(fname)
-	if err != nil {
-		return
-	}
-	defer m.Close()
-
-	if m.GBS != nil {
-		info = &bitstreamInfo{
-			InterfaceUUID:       m.GBS.InterfaceUUID(),
-			AcceleratorTypeUUID: m.GBS.AcceleratorTypeUUID(),
-			InstallPath:         filepath.Join(fpgaBitStreamDirectory, m.GBS.InterfaceUUID(), m.Hash+filepath.Ext(fname)),
-			Extra: map[string]string{
-				"Board":   m.Board,
-				"Target":  m.Target,
-				"Hash":    m.Hash,
-				"Version": m.Version,
-				"Size":    strconv.FormatUint(m.GBS.Bitstream.Size, 10),
-			},
-		}
-		return
-	}
-	return nil, errors.Errorf("can't read GBS from AOCX file")
 }
 
 func fmeInfo(fname string) error {
@@ -299,23 +246,21 @@ func doPR(fme, bs string, dryRun bool) error {
 	defer f.Close()
 	fmt.Print("API:")
 	fmt.Println(f.GetAPIVersion())
-	m, err := gbs.Open(bs)
+	m, err := bitstream.Open(bs)
 	if err != nil {
 		return err
 	}
 	defer m.Close()
-	// fmt.Printf("Return:\n%+v\n", m)
-	if m.Bitstream != nil {
-		rawBistream, err := m.Bitstream.Data()
-		if err != nil {
-			return err
-		}
-		if dryRun {
-			fmt.Println("Dry-Run: Skipping actual programming")
-			return nil
-		}
-		fmt.Print("Trying to PR, brace yourself! :")
-		fmt.Println(f.PortPR(0, rawBistream))
+
+	rawBistream, err := m.RawBitstreamData()
+	if err != nil {
+		return err
 	}
+	if dryRun {
+		fmt.Println("Dry-Run: Skipping actual programming")
+		return nil
+	}
+	fmt.Print("Trying to PR, brace yourself! :")
+	fmt.Println(f.PortPR(0, rawBistream))
 	return nil
 }

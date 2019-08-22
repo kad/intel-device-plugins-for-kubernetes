@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gbs
+package bitstream
 
 import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -28,25 +30,26 @@ const (
 	bitstreamGUID1   uint64 = 0x414750466e6f6558
 	bitstreamGUID2   uint64 = 0x31303076534247b7
 	fileHeaderLength        = 20
+	fileExtensionGBS        = ".gbs"
 )
 
-// BitstreamHeader represents header struct of the GBS file
-type BitstreamHeader struct {
+// Header represents header struct of the GBS file
+type Header struct {
 	GUID1          uint64
 	GUID2          uint64
 	MetadataLength uint32
 }
 
-// A File represents an open GBS file.
-type File struct {
-	BitstreamHeader
-	Metadata  BitstreamMetadata
+// FileGBS represents an open GBS file.
+type FileGBS struct {
+	Header
+	Metadata  Metadata
 	Bitstream *Bitstream
 	closer    io.Closer
 }
 
-// BitstreamMetadata represents parsed JSON metadata of GBS file
-type BitstreamMetadata struct {
+// Metadata represents parsed JSON metadata of GBS file
+type Metadata struct {
 	Version      int    `json:"version"`
 	PlatformName string `json:"platform-name,omitempty"`
 	AfuImage     struct {
@@ -84,6 +87,8 @@ type Bitstream struct {
 	// with other clients.
 	io.ReaderAt
 	sr *io.SectionReader
+	// embed common bitstream interfaces
+	File
 }
 
 // Open returns a new ReadSeeker reading the bitsream body.
@@ -96,13 +101,13 @@ func (b *Bitstream) Data() ([]byte, error) {
 	return dat[0:n], err
 }
 
-// Open opens the named file using os.Open and prepares it for use as GBS.
-func Open(name string) (*File, error) {
+// OpenGBS opens the named file using os.Open and prepares it for use as GBS.
+func OpenGBS(name string) (*FileGBS, error) {
 	f, err := os.Open(name)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	ff, err := NewFile(f)
+	ff, err := NewFileGBS(f)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -111,10 +116,10 @@ func Open(name string) (*File, error) {
 	return ff, nil
 }
 
-// Close closes the File.
-// If the File was created using NewFile directly instead of Open,
+// Close closes the FileGBS.
+// If the FileGBS was created using NewFileGBS directly instead of Open,
 // Close has no effect.
-func (f *File) Close() (err error) {
+func (f *FileGBS) Close() (err error) {
 	if f.closer != nil {
 		err = f.closer.Close()
 		f.closer = nil
@@ -123,13 +128,13 @@ func (f *File) Close() (err error) {
 }
 
 // InterfaceUUID returns normalized Metadata.AfuImage.InterfaceUUID
-func (f *File) InterfaceUUID() string {
+func (f *FileGBS) InterfaceUUID() string {
 	return strings.ToLower(strings.Replace(f.Metadata.AfuImage.InterfaceUUID, "-", "", -1))
 }
 
 // AcceleratorTypeUUID returns list of normalized AFU UUID from the metadata.
 // Empty string returned in case of errors in Metadata
-func (f *File) AcceleratorTypeUUID() (ret string) {
+func (f *FileGBS) AcceleratorTypeUUID() (ret string) {
 	if len(f.Metadata.AfuImage.AcceleratorClusters) == 1 {
 		ret = strings.ToLower(strings.Replace(f.Metadata.AfuImage.AcceleratorClusters[0].AcceleratorTypeUUID, "-", "", -1))
 	}
@@ -142,16 +147,16 @@ type bitstreamReader interface {
 	io.ReaderAt
 }
 
-// NewFile creates a new File for accessing an ELF binary in an underlying reader.
+// NewFileGBS creates a new FileGBS for accessing an ELF binary in an underlying reader.
 // The ELF binary is expected to start at position 0 in the ReaderAt.
-func NewFile(r bitstreamReader) (*File, error) {
+func NewFileGBS(r bitstreamReader) (*FileGBS, error) {
 	sr := io.NewSectionReader(r, 0, 1<<63-1)
 
-	f := new(File)
+	f := new(FileGBS)
 	// TODO:
 	// 1. Read file header
 	sr.Seek(0, io.SeekStart)
-	if err := binary.Read(sr, binary.LittleEndian, &f.BitstreamHeader); err != nil {
+	if err := binary.Read(sr, binary.LittleEndian, &f.Header); err != nil {
 		return nil, errors.Wrap(err, "unable to read header")
 	}
 	// 2. Validate Magic/GUIDs
@@ -182,4 +187,37 @@ func NewFile(r bitstreamReader) (*File, error) {
 	b.ReaderAt = b.sr
 	f.Bitstream = b
 	return f, nil
+}
+
+// File interfaces implementations
+
+// RawBitstreamReader returns Reader for raw bitstream data
+func (f *FileGBS) RawBitstreamReader() io.ReadSeeker {
+	return f.Bitstream.Open()
+}
+
+// RawBitstreamData returns raw bitstream data
+func (f *FileGBS) RawBitstreamData() ([]byte, error) {
+	return f.Bitstream.Data()
+}
+
+// UniqueUUID represents the unique field that identifies bitstream.
+// For GBS it is the AFU ID
+func (f *FileGBS) UniqueUUID() string {
+	return f.AcceleratorTypeUUID()
+}
+
+// InstallPath returns unique filename for bitstream relative to given directory
+func (f *FileGBS) InstallPath(root string) (ret string) {
+	interfaceID := f.InterfaceUUID()
+	uniqID := f.UniqueUUID()
+	if interfaceID != "" && uniqID != "" {
+		ret = filepath.Join(root, interfaceID, uniqID+fileExtensionGBS)
+	}
+	return
+}
+
+// ExtraMetadata returns map of key/value with additional metadata that can be detected from bitstream
+func (f *FileGBS) ExtraMetadata() map[string]string {
+	return map[string]string{"Size": strconv.FormatUint(f.Bitstream.Size, 10)}
 }

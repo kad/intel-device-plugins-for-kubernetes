@@ -24,7 +24,6 @@ import (
 	utilsexec "k8s.io/utils/exec"
 
 	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/device"
-	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/gbs"
 	"github.com/pkg/errors"
 )
 
@@ -53,7 +52,7 @@ type OPAEBitstream struct {
 
 // Init gets Region and AFU from .gbs file
 func (bitstream *OPAEBitstream) Init() error {
-	gbs, err := gbs.Open(bitstream.Path)
+	gbs, err := OpenGBS(bitstream.Path)
 	if err != nil {
 		return errors.Wrapf(err, "%s: can't get bitstream info", bitstream.Path)
 	}
@@ -166,4 +165,15 @@ func (bitstream *OpenCLBitstream) Validate(region, afu string) error {
 // Program stub for OpenCLBitstream
 func (bitstream *OpenCLBitstream) Program(device *device.FPGADevice, execer utilsexec.Interface) error {
 	return fmt.Errorf("Not implemented")
+}
+
+// Open bitstream file, detecting type based on the filename extension.
+func Open(fname string) (File, error) {
+	switch filepath.Ext(fname) {
+	case ".gbs":
+		return OpenGBS(fname)
+	case ".aocx":
+		return OpenAOCX(fname)
+	}
+	return nil, errors.Errorf("unsupported file format %s", fname)
 }
