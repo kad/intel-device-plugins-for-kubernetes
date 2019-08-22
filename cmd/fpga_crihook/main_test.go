@@ -47,11 +47,145 @@ func createTestDirs(sysfs string, sysfsDirs []string, sysfsFiles map[string][]by
 	return nil
 }
 
+func TestGetStdin(t *testing.T) {
+	tcases := []struct {
+		name        string
+		stdinJSON   string
+		expectedErr bool
+	}{
+		{
+			name:        "correct stdin",
+			stdinJSON:   "stdin-correct.json",
+			expectedErr: false,
+		},
+		{
+			name:        "bundle field is not set",
+			stdinJSON:   "stdin-no-bundle.json",
+			expectedErr: true,
+		},
+		{
+			name:        "bundle directory doesn't exist",
+			stdinJSON:   "stdin-bundle-driectory-doesnt-exist.json",
+			expectedErr: true,
+		},
+		{
+			name:        "incorrect JSON",
+			stdinJSON:   "stdin-incorrect-JSON.json",
+			expectedErr: true,
+		},
+		{
+			name:        "no annotations",
+			stdinJSON:   "stdin-no-annotations.json",
+			expectedErr: true,
+		},
+		{
+			name:        "annotation is not set",
+			stdinJSON:   "stdin-incorrect-intel-annotation.json",
+			expectedErr: true,
+		},
+	}
+	for _, tc := range tcases {
+		t.Run(tc.name, func(t *testing.T) {
+			stdin, err := os.Open(path.Join("testdata", tc.stdinJSON))
+			if err != nil {
+				t.Fatalf("can't open file %s: %v", tc.stdinJSON, err)
+			}
+			stdinJ, err := getStdin(stdin)
+			if err != nil {
+				if !tc.expectedErr {
+					t.Errorf("unexpected error: %+v", err)
+				}
+			} else {
+				if stdinJ.Annotations.ComIntelFpgaMode != "fpga.intel.com/region" {
+					t.Errorf("incorrect annotation value: %s", stdinJ.Annotations.ComIntelFpgaMode)
+				}
+			}
+		})
+	}
+}
+
+func TestGetConfig(t *testing.T) {
+	tcases := []struct {
+		name        string
+		configJSON  string
+		expectedErr bool
+	}{
+		{
+			name:        "correct config",
+			configJSON:  "config-correct.json",
+			expectedErr: false,
+		},
+		{
+			name:        "incorrect JSON",
+			configJSON:  "config-broken-json.json",
+			expectedErr: true,
+		},
+		{
+			name:        "no process key in JSON",
+			configJSON:  "config-no-process.json",
+			expectedErr: true,
+		},
+		{
+			name:        "no process.env key in JSON",
+			configJSON:  "config-no-env.json",
+			expectedErr: true,
+		},
+		{
+			name:        "no linux key in JSON",
+			configJSON:  "config-no-linux.json",
+			expectedErr: true,
+		},
+		{
+			name:        "no linux.devices key in JSON",
+			configJSON:  "config-no-devices.json",
+			expectedErr: true,
+		},
+		{
+			name:        "config file doesn't exist",
+			configJSON:  "doesnt-exist",
+			expectedErr: true,
+		},
+	}
+	for _, tc := range tcases {
+		t.Run(tc.name, func(t *testing.T) {
+			fname := "testdata/stdin-correct.json"
+			stdin, err := os.Open(fname)
+			if err != nil {
+				t.Fatalf("can't open file %s: %v", fname, err)
+			}
+			stdinJ, err := getStdin(stdin)
+			if err != nil {
+				t.Fatalf("can't decode %s: %+v", fname, err)
+			}
+
+			he, err := newHookEnv("", "", tc.configJSON, nil)
+			if err != nil {
+				t.Fatalf("can't create HookEnv for config JSON %s: %+v", tc.configJSON, err)
+			}
+
+			config, err := he.getConfig(stdinJ)
+			if err != nil {
+				if !tc.expectedErr {
+					t.Errorf("unexpected error: %+v", err)
+				}
+			} else {
+				if len(config.Process.Env) == 0 {
+					t.Errorf("%s: process.env is empty", tc.configJSON)
+				}
+				if len(config.Linux.Devices) == 0 {
+					t.Errorf("%s: linux.devices is empty", tc.configJSON)
+				}
+			}
+		})
+	}
+}
+
 func TestGetFPGAParams(t *testing.T) {
 	tmpdir := fmt.Sprintf("/tmp/fpgacriohook-TestGetFPGAParams-%d", time.Now().Unix())
 	sysfsOPAE := path.Join(tmpdir, "sys", "class", "fpga")
 	sysfsDFL := path.Join(tmpdir, "sys", "class", "fpga_region")
 	tcases := []struct {
+		name               string
 		sysfs              string
 		stdinJSON          string
 		configJSON         string
@@ -64,6 +198,7 @@ func TestGetFPGAParams(t *testing.T) {
 		expectedDeviceNode string
 	}{
 		{
+			name:       "correct OPAE setup",
 			sysfs:      sysfsOPAE,
 			stdinJSON:  "stdin-correct.json",
 			configJSON: "config-correct.json",
@@ -82,6 +217,7 @@ func TestGetFPGAParams(t *testing.T) {
 			expectedDeviceNode: "/dev/intel-fpga-fme.0",
 		},
 		{
+			name:       "correct DFL setup",
 			sysfs:      sysfsDFL,
 			stdinJSON:  "stdin-correct.json",
 			configJSON: "config-correct-DFL.json",
@@ -100,6 +236,7 @@ func TestGetFPGAParams(t *testing.T) {
 			expectedDeviceNode: "/dev/dfl-fme.0",
 		},
 		{
+			name:       "incorrect interface id",
 			sysfs:      sysfsOPAE,
 			stdinJSON:  "stdin-correct.json",
 			configJSON: "config-correct.json",
@@ -110,66 +247,28 @@ func TestGetFPGAParams(t *testing.T) {
 			expectedErr: true,
 		},
 		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-no-bundle.json",
-			configJSON:  "config-correct.json",
-			expectedErr: true,
-		},
-		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-bundle-dir-doesnt-exist.json",
-			configJSON:  "config-correct.json",
-			expectedErr: true,
-		},
-		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-correct.json",
-			configJSON:  "config-broken-json.json",
-			expectedErr: true,
-		},
-		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-correct.json",
-			configJSON:  "config-no-process.json",
-			expectedErr: true,
-		},
-		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-correct.json",
-			configJSON:  "config-no-env.json",
-			expectedErr: true,
-		},
-		{
+			name:        "no region in config",
 			sysfs:       sysfsOPAE,
 			stdinJSON:   "stdin-correct.json",
 			configJSON:  "config-no-region.json",
 			expectedErr: true,
 		},
 		{
+			name:        "no AFU in config",
 			sysfs:       sysfsOPAE,
 			stdinJSON:   "stdin-correct.json",
 			configJSON:  "config-no-afu.json",
 			expectedErr: true,
 		},
 		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-correct.json",
-			configJSON:  "config-no-linux.json",
-			expectedErr: true,
-		},
-		{
-			sysfs:       sysfsOPAE,
-			stdinJSON:   "stdin-correct.json",
-			configJSON:  "config-no-devices.json",
-			expectedErr: true,
-		},
-		{
+			name:        "no FPGA devices in config",
 			sysfs:       sysfsOPAE,
 			stdinJSON:   "stdin-correct.json",
 			configJSON:  "config-no-FPGA-devices.json",
 			expectedErr: true,
 		},
 		{
+			name:        "region and AFU don't match",
 			sysfs:       sysfsOPAE,
 			stdinJSON:   "stdin-correct.json",
 			configJSON:  "config-region-afu-dont-match.json",
@@ -177,45 +276,51 @@ func TestGetFPGAParams(t *testing.T) {
 		},
 	}
 	for tcnum, tc := range tcases {
-		stdin, err := os.Open(path.Join("testdata", tc.stdinJSON))
-		if err != nil {
-			t.Fatalf("can't open file %s: %v", tc.stdinJSON, err)
-		}
-
-		err = createTestDirs(tc.sysfs, tc.sysfsdirs, tc.sysfsfiles)
-		if err != nil {
-			t.Fatalf("can't create temp files: %+v", err)
-		}
-
-		var content Stdin
-		err = decodeJSONStream(stdin, &content)
-		if err != nil {
-			t.Fatalf("can't decode json file %s: %+v", tc.stdinJSON, err)
-		}
-
-		he, err := newHookEnv(tmpdir, "", tc.configJSON, nil)
-		if err != nil {
-			t.Fatalf("can't create HookEnv for config JSON %s: %+v", tc.stdinJSON, err)
-		}
-
-		params, err := he.getFPGAParams(&content)
-		if err != nil {
-			if !tc.expectedErr {
-				t.Errorf("unexpected error in test case #%d: %+v", tcnum, err)
+		t.Run(tc.name, func(t *testing.T) {
+			stdin, err := os.Open(path.Join("testdata", tc.stdinJSON))
+			if err != nil {
+				t.Fatalf("can't open file %s: %v", tc.stdinJSON, err)
 			}
-		} else {
-			if params[0].region != tc.expectedRegion {
-				t.Errorf("#%d: expected region: %s, actual: %s", tcnum, tc.expectedRegion, params[0].region)
-			} else if params[0].afu != tc.expectedAFU {
-				t.Errorf("#%d: expected AFU: %s, actual: %s", tcnum, tc.expectedAFU, params[0].afu)
-			} else if params[0].devNode != tc.expectedDeviceNode {
-				t.Errorf("#%d: expected device node: %s, actual: %s", tcnum, tc.expectedDeviceNode, params[0].devNode)
-			}
-		}
 
-		err = os.RemoveAll(tmpdir)
-		if err != nil {
-			t.Fatal(err)
-		}
+			err = createTestDirs(tc.sysfs, tc.sysfsdirs, tc.sysfsfiles)
+			if err != nil {
+				t.Fatalf("can't create temp files: %+v", err)
+			}
+
+			he, err := newHookEnv(tmpdir, "", tc.configJSON, nil)
+			if err != nil {
+				t.Fatalf("can't create HookEnv for config JSON %s: %+v", tc.configJSON, err)
+			}
+
+			stdinJ, err := getStdin(stdin)
+			if err != nil {
+				t.Fatalf("can't parse stdin JSON %s: %+v", tc.stdinJSON, err)
+			}
+
+			config, err := he.getConfig(stdinJ)
+			if err != nil {
+				t.Fatalf("can't parse JSON config %s: %+v", tc.configJSON, err)
+			}
+
+			params, err := he.getFPGAParams(config)
+			if err != nil {
+				if !tc.expectedErr {
+					t.Errorf("unexpected error in test case #%d: %+v", tcnum, err)
+				}
+			} else {
+				if params[0].region != tc.expectedRegion {
+					t.Errorf("#%d: expected region: %s, actual: %s", tcnum, tc.expectedRegion, params[0].region)
+				} else if params[0].afu != tc.expectedAFU {
+					t.Errorf("#%d: expected AFU: %s, actual: %s", tcnum, tc.expectedAFU, params[0].afu)
+				} else if params[0].devNode != tc.expectedDeviceNode {
+					t.Errorf("#%d: expected device node: %s, actual: %s", tcnum, tc.expectedDeviceNode, params[0].devNode)
+				}
+			}
+
+			err = os.RemoveAll(tmpdir)
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

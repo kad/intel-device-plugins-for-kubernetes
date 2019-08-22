@@ -113,7 +113,7 @@ func parseDev(devData string) (uint32, uint32, error) {
 	major := numbers[1]
 	minorInt, err := strconv.ParseInt(minor, 10, 32)
 	if err != nil {
-		return 0, 0, errors.Wrapf(err,"can't convert device minor %s to a number", minor)
+		return 0, 0, errors.Wrapf(err, "can't convert device minor %s to a number", minor)
 	}
 	majorInt, err := strconv.ParseInt(major, 10, 32)
 	if err != nil {
