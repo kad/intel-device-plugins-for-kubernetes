@@ -24,11 +24,18 @@ import "io"
 // as well as mechanisms to identify bitstreams
 type File interface {
 	io.Closer
+	// RawBitstreamReader returns Reader for raw bitstream data
 	RawBitstreamReader() io.ReadSeeker
+	// RawBitstreamData returns raw bitstream byte array
 	RawBitstreamData() ([]byte, error)
+	// InterfaceUUID returns bitstream's Interface UUID
 	InterfaceUUID() string
+	// AcceleratorTypeUUID returns bitstream's AFU UUID
 	AcceleratorTypeUUID() string
+	// UniqueUUID returns UUID that uniquely identifies bitstream
 	UniqueUUID() string
+	// InstallPath returns unique filename for bitstream relative to given directory
 	InstallPath(string) string
+	// ExtraMetadata returns map of key/value with additional metadata that can be detected from bitstream
 	ExtraMetadata() map[string]string
 }

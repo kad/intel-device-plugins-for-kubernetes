@@ -104,9 +104,18 @@ func validateFlags(cmd, bitstream, device string) error {
 	return nil
 }
 
+// WIP testing command
 func magic(dev string) (err error) {
 	d, err := device.GetFMEDevice("", dev)
 	fmt.Printf("%+v %+v\n", d, err)
+
+	d1, err := fpga.FindSysFsDevice(dev)
+	fmt.Printf("%+v %+v\n", d1, err)
+	if err != nil {
+		return
+	}
+	d2, err := fpga.NewPCIDevice(d1)
+	fmt.Printf("%+v %+v\n", d2, err)
 	return
 }
 
