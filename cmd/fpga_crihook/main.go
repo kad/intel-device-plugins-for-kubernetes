@@ -112,11 +112,7 @@ func newHookEnv(sysFsPrefix, bitstreamDir string, config string, execer utilsexe
 	}, nil
 }
 
-func (he *hookEnv) getFPGAParams(stdinJ *Stdin) ([]fpgaParams, error) {
-	if stdinJ.Bundle == "" {
-		return nil, errors.New("'bundle' field is not set in the stdin JSON")
-	}
-
+func (he *hookEnv) getConfig(stdinJ *Stdin) (*Config, error) {
 	configPath := filepath.Join(stdinJ.Bundle, he.config)
 	configFile, err := os.Open(configPath)
 	if err != nil {
@@ -137,7 +133,10 @@ func (he *hookEnv) getFPGAParams(stdinJ *Stdin) ([]fpgaParams, error) {
 	if len(config.Linux.Devices) == 0 {
 		return nil, errors.Errorf("%s: linux.devices is empty", configPath)
 	}
+	return &config, nil
+}
 
+func (he *hookEnv) getFPGAParams(config *Config) ([]fpgaParams, error) {
 	// parse FPGA_REGION_N and FPGA_AFU_N environment variables
 	regionEnv := make(map[string]string)
 	afuEnv := make(map[string]string)
@@ -209,25 +208,46 @@ func (he *hookEnv) getFPGAParams(stdinJ *Stdin) ([]fpgaParams, error) {
 	return params, nil
 }
 
-func (he *hookEnv) process(reader io.Reader) error {
+func getStdin(reader io.Reader) (*Stdin, error) {
 	var stdinJ Stdin
 	err := decodeJSONStream(reader, &stdinJ)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Check if device plugin annotation is set
 	if stdinJ.Annotations.ComIntelFpgaMode == "" {
-		fmt.Printf("annotation %s is not set, skipping\n", annotationName)
+		return nil, fmt.Errorf("annotation %s is not set", annotationName)
 	}
 
 	// Check if device plugin annotation is set
 	if stdinJ.Annotations.ComIntelFpgaMode != annotationValue {
-		fmt.Printf("annotation %s has incorrect value '%s', skipping\n", annotationName, stdinJ.Annotations.ComIntelFpgaMode)
-		return nil
+		return nil, fmt.Errorf("annotation %s has incorrect value '%s'", annotationName, stdinJ.Annotations.ComIntelFpgaMode)
 	}
 
-	paramslist, err := he.getFPGAParams(&stdinJ)
+	if stdinJ.Bundle == "" {
+		return nil, errors.New("'bundle' field is not set in the stdin JSON")
+	}
+
+	if _, err := os.Stat(stdinJ.Bundle); err != nil {
+		return nil, fmt.Errorf("bundle directory %s: stat error: %+v", stdinJ.Bundle, err)
+	}
+
+	return &stdinJ, nil
+}
+
+func (he *hookEnv) process(reader io.Reader) error {
+	stdin, err := getStdin(reader)
+	if err != nil {
+		return err
+	}
+
+	config, err := he.getConfig(stdin)
+	if err != nil {
+		return err
+	}
+
+	paramslist, err := he.getFPGAParams(config)
 	if err != nil {
 		return errors.WithMessage(err, "couldn't get FPGA region, AFU and device node")
 	}
