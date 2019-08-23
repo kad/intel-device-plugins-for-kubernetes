@@ -195,7 +195,7 @@ func TestGetFPGAParams(t *testing.T) {
 		expectedErr        bool
 		expectedRegion     string
 		expectedAFU        string
-		expectedDeviceNode string
+		expectedPortDevice string
 	}{
 		{
 			name:       "correct OPAE setup",
@@ -214,7 +214,7 @@ func TestGetFPGAParams(t *testing.T) {
 			expectedErr:        false,
 			expectedRegion:     "ce48969398f05f33946d560708be108a",
 			expectedAFU:        "f7df405cbd7acf7222f144b0b93acd18",
-			expectedDeviceNode: "/dev/intel-fpga-fme.0",
+			expectedPortDevice: "intel-fpga-port.0",
 		},
 		{
 			name:       "correct DFL setup",
@@ -233,7 +233,7 @@ func TestGetFPGAParams(t *testing.T) {
 			expectedErr:        false,
 			expectedRegion:     "ce48969398f05f33946d560708be108a",
 			expectedAFU:        "f7df405cbd7acf7222f144b0b93acd18",
-			expectedDeviceNode: "/dev/dfl-fme.0",
+			expectedPortDevice: "dfl-port.0",
 		},
 		{
 			name:       "incorrect interface id",
@@ -312,8 +312,8 @@ func TestGetFPGAParams(t *testing.T) {
 					t.Errorf("#%d: expected region: %s, actual: %s", tcnum, tc.expectedRegion, params[0].region)
 				} else if params[0].afu != tc.expectedAFU {
 					t.Errorf("#%d: expected AFU: %s, actual: %s", tcnum, tc.expectedAFU, params[0].afu)
-				} else if params[0].devNode != tc.expectedDeviceNode {
-					t.Errorf("#%d: expected device node: %s, actual: %s", tcnum, tc.expectedDeviceNode, params[0].devNode)
+				} else if params[0].portDevice != tc.expectedPortDevice {
+					t.Errorf("#%d: expected device node: %s, actual: %s", tcnum, tc.expectedPortDevice, params[0].portDevice)
 				}
 			}
 

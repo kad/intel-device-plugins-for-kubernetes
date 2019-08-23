@@ -98,9 +98,9 @@ type hookEnv struct {
 }
 
 type fpgaParams struct {
-	region  string
-	afu     string
-	devNode string
+	region     string
+	afu        string
+	portDevice string
 }
 
 func newHookEnv(sysFsPrefix, bitstreamDir string, config string, execer utilsexec.Interface) (*hookEnv, error) {
@@ -191,9 +191,9 @@ func (he *hookEnv) getFPGAParams(config *Config) ([]fpgaParams, error) {
 			if fme.ID == region {
 				params = append(params,
 					fpgaParams{
-						afu:     afu,
-						region:  fme.ID,
-						devNode: fme.DevNode,
+						afu:        afu,
+						region:     fme.ID,
+						portDevice: deviceName,
 					},
 				)
 				dev.processed = true
@@ -253,7 +253,7 @@ func (he *hookEnv) process(reader io.Reader) error {
 	}
 
 	for _, params := range paramslist {
-		programmedAfu, err := device.GetAFUDevice(he.sysFsPrefix, params.devNode)
+		programmedAfu, err := device.GetAFUDevice(he.sysFsPrefix, params.portDevice)
 		if err != nil {
 			return err
 		}
@@ -278,7 +278,7 @@ func (he *hookEnv) process(reader io.Reader) error {
 			return err
 		}
 
-		fme, err := device.GetFMEDevice(he.sysFsPrefix, params.devNode)
+		fme, err := device.GetFMEDevice(he.sysFsPrefix, params.portDevice)
 		if err != nil {
 			return err
 		}
@@ -288,7 +288,7 @@ func (he *hookEnv) process(reader io.Reader) error {
 			return err
 		}
 
-		programmedAfu, err = device.GetAFUDevice(he.sysFsPrefix, params.devNode)
+		programmedAfu, err = device.GetAFUDevice(he.sysFsPrefix, params.portDevice)
 		if err != nil {
 			return err
 		}
