@@ -76,6 +76,12 @@ ARG HOOK_CONF_DST=$DST_DIR/$HOOK_CONF
 
 COPY --from=builder /go/bin/fpga_crihook $CRI_HOOK_SRC
 
+RUN echo -e "{\n\
+    \"hook\" : \"$CRI_HOOK_DST\",\n\
+    \"stage\" : [ \"prestart\" ],\n\
+    \"annotation\": [ \"fpga.intel.com/region\" ]\n\
+}\n">>$HOOK_CONF_SRC
+
 RUN echo -e "#!/bin/sh\n\
 rsync -a --delete $SRC_DIR/ $DST_DIR\n\
 mkdir -p /etc/containers/oci/hooks.d\n\
