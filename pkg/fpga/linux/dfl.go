@@ -19,11 +19,9 @@ package linux
 
 import (
 	"math"
-	"os"
 	"path/filepath"
 	"strconv"
 	"unsafe"
-	"fmt"
 
 	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/bitstream"
 	"github.com/pkg/errors"
@@ -38,7 +36,6 @@ const (
 // DflFME represent DFL FPGA FME device
 type DflFME struct {
 	FpgaFME
-	f                 *os.File
 	DevPath           string
 	SysFsPath         string
 	Name              string
@@ -53,30 +50,23 @@ type DflFME struct {
 
 // Close closes open device
 func (f *DflFME) Close() error {
-	if f.f != nil {
-		return f.f.Close()
-	}
+	// if f.f != nil {
+	// 	return f.f.Close()
+	// }
 	return nil
 }
 
 // NewDflFME Opens device
 func NewDflFME(dev string) (FpgaFME, error) {
-	f, err := os.OpenFile(dev, os.O_RDWR, 0644)
-	if err != nil {
-		return nil, err
-	}
-	fme := &DflFME{DevPath: dev, f: f}
+	fme := &DflFME{DevPath: dev}
 	// check that kernel API is compatible
 	if _, err := fme.GetAPIVersion(); err != nil {
-		fme.Close()
 		return nil, errors.Wrap(err, "kernel API mismatch")
 	}
-	if err = checkVendorAndClass(fme); err != nil {
-		fme.Close()
+	if err := checkVendorAndClass(fme); err != nil {
 		return nil, err
 	}
-	if err = fme.updateProperties(); err != nil {
-		fme.Close()
+	if err := fme.updateProperties(); err != nil {
 		return nil, err
 	}
 	return fme, nil
@@ -85,7 +75,6 @@ func NewDflFME(dev string) (FpgaFME, error) {
 // DflPort represent DFL FPGA Port device
 type DflPort struct {
 	FpgaPort
-	f         *os.File
 	DevPath   string
 	SysFsPath string
 	Name      string
@@ -93,75 +82,69 @@ type DflPort struct {
 	Dev       string
 	AFUID     string
 	ID        string
-	FME		  FpgaFME
+	FME       FpgaFME
 }
 
 // Close closes open device
 func (f *DflPort) Close() error {
 	if f.FME != nil {
-		defer f.FME.Close()
+		return f.FME.Close()
 	}
-	if f.f != nil {
-		return f.f.Close()
-	}
+	// if f.f != nil {
+	// 	return f.f.Close()
+	// }
 	return nil
 }
 
 // NewDflPort Opens device
 func NewDflPort(dev string) (FpgaPort, error) {
-	f, err := os.OpenFile(dev, os.O_RDWR, 0644)
-	if err != nil {
-		return nil, err
-	}
-	port := &DflPort{DevPath: dev, f: f}
+	port := &DflPort{DevPath: dev}
 	// check that kernel API is compatible
 	if _, err := port.GetAPIVersion(); err != nil {
-		port.Close()
 		return nil, errors.Wrap(err, "kernel API mismatch")
 	}
-	if err = checkVendorAndClass(port); err != nil {
-		port.Close()
+	if err := checkVendorAndClass(port); err != nil {
 		return nil, err
 	}
-	if err = port.updateProperties(); err != nil {
-		port.Close()
+	if err := port.updateProperties(); err != nil {
 		return nil, err
 	}
 	return port, nil
 }
 
 // common ioctls for FME and Port
-func commonGetAPIVersion(fd uintptr) (int, error) {
-	v, err := ioctl(fd, DFL_FPGA_GET_API_VERSION, 0)
+func commonDflGetAPIVersion(dev string) (int, error) {
+	v, err := ioctlDev(dev, DFL_FPGA_GET_API_VERSION, 0)
 	return int(v), err
 }
-func commonCheckExtension(fd uintptr) (int, error) {
-	v, err := ioctl(fd, DFL_FPGA_CHECK_EXTENSION, 0)
+func commonDflCheckExtension(dev string) (int, error) {
+	v, err := ioctlDev(dev, DFL_FPGA_CHECK_EXTENSION, 0)
 	return int(v), err
 }
 
 // GetAPIVersion  Report the version of the driver API.
 // * Return: Driver API Version.
 func (f *DflFME) GetAPIVersion() (int, error) {
-	return commonGetAPIVersion(f.f.Fd())
+	return commonDflGetAPIVersion(f.DevPath)
 }
 
 // CheckExtension Check whether an extension is supported.
 // * Return: 0 if not supported, otherwise the extension is supported.
 func (f *DflFME) CheckExtension() (int, error) {
-	return commonCheckExtension(f.f.Fd())
+	// return commonCheckExtension(f.f.Fd())
+	return commonDflCheckExtension(f.DevPath)
 }
 
 // GetAPIVersion  Report the version of the driver API.
 // * Return: Driver API Version.
 func (f *DflPort) GetAPIVersion() (int, error) {
-	return commonGetAPIVersion(f.f.Fd())
+	return commonDflGetAPIVersion(f.DevPath)
 }
 
 // CheckExtension Check whether an extension is supported.
 // * Return: 0 if not supported, otherwise the extension is supported.
 func (f *DflPort) CheckExtension() (int, error) {
-	return commonCheckExtension(f.f.Fd())
+	return commonDflCheckExtension(f.DevPath)
 }
 
 // PortReset Reset the FPGA Port and its AFU. No parameters are supported.
@@ -170,7 +153,7 @@ func (f *DflPort) CheckExtension() (int, error) {
 // (e.g. DMA or PR operation failure) and be recoverable from the failure.
 // * Return: 0 on success, -errno of failure
 func (f *DflPort) PortReset() error {
-	_, err := ioctl(f.f.Fd(), DFL_FPGA_PORT_RESET, 0)
+	_, err := ioctlDev(f.DevPath, DFL_FPGA_PORT_RESET, 0)
 	return err
 }
 
@@ -180,7 +163,7 @@ func (f *DflPort) PortReset() error {
 func (f *DflPort) PortGetInfo() (ret FpgaPortInfo, err error) {
 	var value DflFpgaPortInfo
 	value.Argsz = uint32(unsafe.Sizeof(value))
-	_, err = ioctl(f.f.Fd(), DFL_FPGA_PORT_GET_INFO, uintptr(unsafe.Pointer(&value)))
+	_, err = ioctlDev(f.DevPath, DFL_FPGA_PORT_GET_INFO, uintptr(unsafe.Pointer(&value)))
 	if err == nil {
 		ret.Flags = value.Flags
 		ret.Regions = value.Regions
@@ -198,7 +181,7 @@ func (f *DflPort) PortGetRegionInfo(index uint32) (ret FpgaPortRegionInfo, err e
 	var value DflFpgaPortRegionInfo
 	value.Argsz = uint32(unsafe.Sizeof(value))
 	value.Index = index
-	_, err = ioctl(f.f.Fd(), DFL_FPGA_PORT_GET_REGION_INFO, uintptr(unsafe.Pointer(&value)))
+	_, err = ioctlDev(f.DevPath, DFL_FPGA_PORT_GET_REGION_INFO, uintptr(unsafe.Pointer(&value)))
 	if err == nil {
 		ret.Flags = value.Flags
 		ret.Index = value.Index
@@ -220,7 +203,7 @@ func (f *DflFME) PortPR(port uint32, bitstream []byte) error {
 	value.Port_id = port
 	value.Buffer_size = uint32(len(bitstream))
 	value.Buffer_address = uint64(uintptr(unsafe.Pointer(&bitstream[0])))
-	_, err := ioctl(f.f.Fd(), DFL_FPGA_FME_PORT_PR, uintptr(unsafe.Pointer(&value)))
+	_, err := ioctlDev(f.DevPath, DFL_FPGA_FME_PORT_PR, uintptr(unsafe.Pointer(&value)))
 	return err
 }
 
@@ -380,7 +363,7 @@ func (f *DflPort) GetFME() (fme FpgaFME, err error) {
 		return
 	}
 	f.FME = fme
-	return 
+	return
 }
 
 // GetPortID returns ID of the FPGA port within physical device
@@ -407,7 +390,6 @@ func (f *DflPort) GetAcceleratorTypeUUID() (afuID string) {
 // GetInterfaceUUID returns Interface UUID for FME
 func (f *DflPort) GetInterfaceUUID() (id string) {
 	fme, err := f.GetFME()
-	fmt.Println(fme, err)
 	if err != nil {
 		return ""
 	}

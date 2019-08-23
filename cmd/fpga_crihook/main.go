@@ -270,7 +270,7 @@ func (he *hookEnv) process(reader io.Reader) error {
 		}
 		defer bitstream.Close()
 
-		err = port.PR(bitstream)
+		err = port.PR(bitstream, false)
 
 		programmedAfu = port.GetAcceleratorTypeUUID()
 

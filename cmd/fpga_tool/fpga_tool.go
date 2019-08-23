@@ -15,7 +15,6 @@
 package main
 
 import (
-	"time"
 	"flag"
 	"fmt"
 	"io"
@@ -248,10 +247,8 @@ func doPR(dev, bs string, dryRun bool) error {
 	defer m.Close()
 
 	fmt.Printf("Before programming I %q A %q\n", f.GetInterfaceUUID(), f.GetAcceleratorTypeUUID())
-	fmt.Printf("Trying to program %s to port %s\n", bs, dev)
+	fmt.Printf("Trying to program %s to port %s: ", bs, dev)
 	fmt.Println(f.PR(m, dryRun))
-	// f.PortReset()
-	time.Sleep(1)
 	fmt.Printf("After programming I %q A %q\n", f.GetInterfaceUUID(), f.GetAcceleratorTypeUUID())
 	return nil
 }
