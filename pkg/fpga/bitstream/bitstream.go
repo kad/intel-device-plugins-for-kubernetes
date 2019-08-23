@@ -24,6 +24,7 @@ import (
 	utilsexec "k8s.io/utils/exec"
 
 	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/device"
+	"github.com/intel/intel-device-plugins-for-kubernetes/pkg/fpga/linux"
 	"github.com/pkg/errors"
 )
 
@@ -116,7 +117,14 @@ func (bitstream *OPAEBitstream) Validate(region, afu string) error {
 }
 
 func getFpgaConfArgs(devNode string) ([]string, error) {
-	for p := devNode; strings.HasPrefix(p, "/sys/devices/pci"); p = filepath.Dir(p) {
+	realDevPath, err := linux.FindSysFsDevice(devNode)
+	if err != nil {
+		return nil, err
+	}
+	if realDevPath == "" {
+		return nil, nil
+	}
+	for p := realDevPath; strings.HasPrefix(p, "/sys/devices/pci"); p = filepath.Dir(p) {
 		pciDevPath, err := filepath.EvalSymlinks(filepath.Join(p, "device"))
 		if err != nil {
 			continue
@@ -127,7 +135,7 @@ func getFpgaConfArgs(devNode string) ([]string, error) {
 		}
 		return []string{"-B", "0x" + subs[1], "-D", "0x" + subs[2], "-F", "0x" + subs[3]}, nil
 	}
-	return nil, errors.Errorf("can't find PCI device address for sysfs entry %s", devNode)
+	return nil, errors.Errorf("can't find PCI device address for sysfs entry %s", realDevPath)
 }
 
 // Program programs OPAE gbs bitstream
