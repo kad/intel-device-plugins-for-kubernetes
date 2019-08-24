@@ -54,11 +54,11 @@ func readFilesInDirectory(fileMap map[string]*string, dir string) error {
 
 // returns filename of the argument after resolving symlinks
 func cleanBasename(name string) string {
-	cleanName, err := filepath.EvalSymlinks(name)
+	realPath, err := filepath.EvalSymlinks(name)
 	if err != nil {
-		return name
+		realPath = name
 	}
-	return filepath.Base(cleanName)
+	return filepath.Base(realPath)
 }
 
 // check that FPGA device is a compatible PCI device

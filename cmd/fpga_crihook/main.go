@@ -184,7 +184,6 @@ func (he *hookEnv) getFPGAParams(config *Config) ([]fpgaParams, error) {
 				continue
 			}
 			port, err := fpga.NewFpgaPort(deviceName)
-			// fme, err := device.GetFMEDevice(he.sysFsPrefix, deviceName)
 			if err != nil {
 				return nil, err
 			}

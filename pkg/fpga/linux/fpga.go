@@ -56,7 +56,7 @@ func NewFpgaPort(fname string) (FpgaPort, error) {
 	case strings.HasPrefix(devName, intelFpgaPortPrefix):
 		return NewIntelFpgaPort(fname)
 	}
-	return nil, errors.Errorf("unknown type of port %s", fname)
+	return nil, errors.Errorf("unknown type of FPGA port %s", devName)
 }
 
 // NewFpgaFME returns FpgaFME for specified device node
@@ -71,7 +71,7 @@ func NewFpgaFME(fname string) (FpgaFME, error) {
 	case strings.HasPrefix(devName, intelFpgaFmePrefix):
 		return NewIntelFpgaFME(fname)
 	}
-	return nil, errors.Errorf("unknown type of port %s", fname)
+	return nil, errors.Errorf("unknown type of FPGA FME %s", devName)
 }
 
 // ListFpgaDevices returns two lists of FPGA device nodes: FMEs and Ports
