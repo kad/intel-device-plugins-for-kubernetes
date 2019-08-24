@@ -53,18 +53,18 @@ func TestGetFPGABitstream(t *testing.T) {
 		expectedErr  bool
 	}{
 		{
-			name:         "Get correct OPAE bistream",
+			name:         "Get broken OPAE bistream file",
 			bitstreamDir: fpgaBitStreamDir,
 			region:       "ce48969398f05f33946d560708be108a",
 			afu:          "f7df405cbd7acf7222f144b0b93acd18",
-			expectedErr:  false,
+			expectedErr:  true,
 		},
 		{
-			name:         "Get correct OpenCL bistream",
+			name:         "Get broken OpenCL bistream file",
 			bitstreamDir: fpgaBitStreamDir,
 			region:       "ce48969398f05f33946d560708be108a",
 			afu:          "d7724dc4a4a3c413f89e433683f9040b",
-			expectedErr:  false,
+			expectedErr:  true,
 		},
 		{
 			name:         "Bitstream not found",
@@ -89,50 +89,6 @@ func TestGetFPGABitstream(t *testing.T) {
 
 }
 
-func TestValidate(t *testing.T) {
-	var fpgaBitStreamDir = "testdata/intel.com/fpga"
-
-	tcases := []struct {
-		name         string
-		bitstreamDir string
-		region       string
-		afu          string
-		expectedErr  bool
-	}{
-		{
-			name:         "Valid OPAE bistream",
-			bitstreamDir: fpgaBitStreamDir,
-			region:       "ce48969398f05f33946d560708be108a",
-			afu:          "f7df405cbd7acf7222f144b0b93acd18",
-			expectedErr:  false,
-		},
-		{
-			name:         "Valid OpenCL bistream",
-			bitstreamDir: fpgaBitStreamDir,
-			region:       "ce48969398f05f33946d560708be108a",
-			afu:          "d7724dc4a4a3c413f89e433683f9040b",
-			expectedErr:  true,
-		},
-	}
-
-	for _, tc := range tcases {
-		t.Run(tc.name, func(t *testing.T) {
-			bitstream, err := GetFPGABitstream(tc.bitstreamDir, tc.region, tc.afu)
-			if err != nil {
-				t.Fatalf("can't create bitstream object: %+v", err)
-			}
-			err = bitstream.Validate(tc.region, tc.afu)
-			if err != nil {
-				if !tc.expectedErr {
-					t.Errorf("unexpected error ocurred: %+v", err)
-				}
-				return
-			}
-		})
-	}
-
-}
-
 func genFakeActions(fcmd *fakeexec.FakeCmd, num int) []fakeexec.FakeCommandAction {
 	var actions []fakeexec.FakeCommandAction
 	for i := 0; i < num; i++ {
@@ -142,58 +98,3 @@ func genFakeActions(fcmd *fakeexec.FakeCmd, num int) []fakeexec.FakeCommandActio
 	}
 	return actions
 }
-
-/*func TestProgram(t *testing.T) {
-	var fpgaBitStreamDir = "testdata/intel.com/fpga"
-
-	tcases := []struct {
-		name         string
-		bitstreamDir string
-		region       string
-		afu          string
-		fme          string
-		expectedErr  bool
-	}{
-		{
-			name:         "Valid OPAE bistream",
-			bitstreamDir: fpgaBitStreamDir,
-			region:       "ce48969398f05f33946d560708be108a",
-			afu:          "f7df405cbd7acf7222f144b0b93acd18",
-			fme:          "intel-fpga-fme.0",
-			expectedErr:  false,
-		},
-	}
-
-	for _, tc := range tcases {
-		t.Run(tc.name, func(t *testing.T) {
-			bitstream, err := GetFPGABitstream(tc.bitstreamDir, tc.region, tc.afu)
-			if err != nil {
-				t.Fatalf("can't create bitstream object: %+v", err)
-			}
-			fme := &device.FPGADevice{
-				ID:   tc.region,
-				Name: tc.fme,
-				//SysfsPath: idPath,
-				//DevNode:   path.Join("/dev", name),
-				//Minor:     minor,
-				//Major:     major,
-			}
-			// create fake execer
-			fakeAction := []fakeexec.FakeCombinedOutputAction{
-				func() ([]byte, error) {
-					return []byte(""), nil // ioutil.ReadFile("testdata/gbs-info-correct.json")
-				},
-			}
-			fcmd := fakeexec.FakeCmd{CombinedOutputScript: fakeAction}
-			execer := fakeexec.FakeExec{CommandScript: genFakeActions(&fcmd, len(fcmd.CombinedOutputScript))}
-
-			err = bitstream.Program(fme, &execer)
-			if err != nil {
-				if !tc.expectedErr {
-					t.Errorf("unexpected error ocurred: %+v", err)
-				}
-				return
-			}
-		})
-	}
-}*/

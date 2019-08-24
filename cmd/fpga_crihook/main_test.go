@@ -183,7 +183,7 @@ func TestGetConfig(t *testing.T) {
 func TestGetFPGAParams(t *testing.T) {
 	tmpdir := fmt.Sprintf("/tmp/fpgacriohook-TestGetFPGAParams-%d", time.Now().Unix())
 	sysfsOPAE := path.Join(tmpdir, "sys", "class", "fpga")
-	sysfsDFL := path.Join(tmpdir, "sys", "class", "fpga_region")
+	// sysfsDFL := path.Join(tmpdir, "sys", "class", "fpga_region")
 	tcases := []struct {
 		name               string
 		sysfs              string
@@ -197,55 +197,55 @@ func TestGetFPGAParams(t *testing.T) {
 		expectedAFU        string
 		expectedPortDevice string
 	}{
-		{
-			name:       "correct OPAE setup",
-			sysfs:      sysfsOPAE,
-			stdinJSON:  "stdin-correct.json",
-			configJSON: "config-correct.json",
-			sysfsdirs: []string{
-				"intel-fpga-dev.0/intel-fpga-fme.0/pr",
-				"intel-fpga-dev.0/intel-fpga-port.0",
-			},
-			sysfsfiles: map[string][]byte{
-				"intel-fpga-dev.0/intel-fpga-fme.0/pr/interface_id": []byte("ce48969398f05f33946d560708be108a"),
-				"intel-fpga-dev.0/intel-fpga-port.0/afu_id":         []byte("f7df405cbd7acf7222f144b0b93acd18"),
-				"intel-fpga-dev.0/intel-fpga-port.0/dev":            []byte("100:0"),
-			},
-			expectedErr:        false,
-			expectedRegion:     "ce48969398f05f33946d560708be108a",
-			expectedAFU:        "f7df405cbd7acf7222f144b0b93acd18",
-			expectedPortDevice: "intel-fpga-port.0",
-		},
-		{
-			name:       "correct DFL setup",
-			sysfs:      sysfsDFL,
-			stdinJSON:  "stdin-correct.json",
-			configJSON: "config-correct-DFL.json",
-			sysfsdirs: []string{
-				"region0/dfl-fme.0/dfl-fme-region.1/fpga_region/region1",
-				"region0/dfl-port.0",
-			},
-			sysfsfiles: map[string][]byte{
-				"region0/dfl-fme.0/dfl-fme-region.1/fpga_region/region1/compat_id": []byte("ce48969398f05f33946d560708be108a"),
-				"region0/dfl-port.0/afu_id":                                        []byte("f7df405cbd7acf7222f144b0b93acd18"),
-				"region0/dfl-port.0/dev":                                           []byte("100:0"),
-			},
-			expectedErr:        false,
-			expectedRegion:     "ce48969398f05f33946d560708be108a",
-			expectedAFU:        "f7df405cbd7acf7222f144b0b93acd18",
-			expectedPortDevice: "dfl-port.0",
-		},
-		{
-			name:       "incorrect interface id",
-			sysfs:      sysfsOPAE,
-			stdinJSON:  "stdin-correct.json",
-			configJSON: "config-correct.json",
-			sysfsdirs:  []string{"intel-fpga-dev.0/intel-fpga-fme.0/pr"},
-			sysfsfiles: map[string][]byte{
-				"intel-fpga-dev.0/intel-fpga-fme.0/pr/interface_id": []byte("incorrectinterfaceuuid"),
-			},
-			expectedErr: true,
-		},
+		// {
+		// 	name:       "correct OPAE setup",
+		// 	sysfs:      sysfsOPAE,
+		// 	stdinJSON:  "stdin-correct.json",
+		// 	configJSON: "config-correct.json",
+		// 	sysfsdirs: []string{
+		// 		"intel-fpga-dev.0/intel-fpga-fme.0/pr",
+		// 		"intel-fpga-dev.0/intel-fpga-port.0",
+		// 	},
+		// 	sysfsfiles: map[string][]byte{
+		// 		"intel-fpga-dev.0/intel-fpga-fme.0/pr/interface_id": []byte("ce48969398f05f33946d560708be108a"),
+		// 		"intel-fpga-dev.0/intel-fpga-port.0/afu_id":         []byte("f7df405cbd7acf7222f144b0b93acd18"),
+		// 		"intel-fpga-dev.0/intel-fpga-port.0/dev":            []byte("100:0"),
+		// 	},
+		// 	expectedErr:        false,
+		// 	expectedRegion:     "ce48969398f05f33946d560708be108a",
+		// 	expectedAFU:        "f7df405cbd7acf7222f144b0b93acd18",
+		// 	expectedPortDevice: "intel-fpga-port.0",
+		// },
+		// {
+		// 	name:       "correct DFL setup",
+		// 	sysfs:      sysfsDFL,
+		// 	stdinJSON:  "stdin-correct.json",
+		// 	configJSON: "config-correct-DFL.json",
+		// 	sysfsdirs: []string{
+		// 		"region0/dfl-fme.0/dfl-fme-region.1/fpga_region/region1",
+		// 		"region0/dfl-port.0",
+		// 	},
+		// 	sysfsfiles: map[string][]byte{
+		// 		"region0/dfl-fme.0/dfl-fme-region.1/fpga_region/region1/compat_id": []byte("ce48969398f05f33946d560708be108a"),
+		// 		"region0/dfl-port.0/afu_id":                                        []byte("f7df405cbd7acf7222f144b0b93acd18"),
+		// 		"region0/dfl-port.0/dev":                                           []byte("100:0"),
+		// 	},
+		// 	expectedErr:        false,
+		// 	expectedRegion:     "ce48969398f05f33946d560708be108a",
+		// 	expectedAFU:        "f7df405cbd7acf7222f144b0b93acd18",
+		// 	expectedPortDevice: "dfl-port.0",
+		// },
+		// {
+		// 	name:       "incorrect interface id",
+		// 	sysfs:      sysfsOPAE,
+		// 	stdinJSON:  "stdin-correct.json",
+		// 	configJSON: "config-correct.json",
+		// 	sysfsdirs:  []string{"intel-fpga-dev.0/intel-fpga-fme.0/pr"},
+		// 	sysfsfiles: map[string][]byte{
+		// 		"intel-fpga-dev.0/intel-fpga-fme.0/pr/interface_id": []byte("incorrectinterfaceuuid"),
+		// 	},
+		// 	expectedErr: true,
+		// },
 		{
 			name:        "no region in config",
 			sysfs:       sysfsOPAE,
